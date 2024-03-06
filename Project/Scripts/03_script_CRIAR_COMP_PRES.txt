@@ -1,0 +1,156 @@
+--=============
+-- Ligação à BD
+--=============
+\set dataBase db_tpa
+;
+\set userName postgres
+;
+\connect :dataBase :userName
+;
+
+-------------------------
+-- Criar uma perseguicao
+-------------------------
+
+DROP TABLE IF EXISTS pp CASCADE;
+
+CREATE TABLE pp (
+    id_perseguidor INTEGER,
+    id_alvo INTEGER,
+    CONSTRAINT pk_perseguicao PRIMARY KEY (id_perseguidor, id_alvo),
+    CONSTRAINT fk_perseguidor FOREIGN KEY (id_perseguidor) REFERENCES objeto_movel (id),
+    CONSTRAINT fk_alvo FOREIGN KEY (id_alvo) REFERENCES objeto_movel (id)
+);
+
+-- criar a preseguicao do objeto 1 ao 2
+INSERT INTO pp (id_perseguidor, id_alvo) VALUES (1, 2);
+
+---------------------------------------------
+-- Criar tabela para armazenar a perseguicao
+---------------------------------------------
+
+DROP TABLE IF EXISTS pp hist_perseguicao;
+
+CREATE TABLE hist_perseguicao (
+    id_perseguidor INTEGER,
+    id_alvo INTEGER,
+    orientacao_perseguidor REAL,
+    velocidade_perseguidor t_velocidade,
+    aceleracao_perseguidor t_aceleracao,
+    g_posicao_perseguidor GEOMETRY(Point),
+    orientacao_alvo REAL,
+    velocidade_alvo t_velocidade,
+    aceleracao_alvo t_aceleracao,
+    g_posicao_alvo GEOMETRY(Point),
+    timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+-------------------------------------------------------
+-- Obter valores de aceleracao para uma 'perseguicao'
+-------------------------------------------------------
+
+DROP FUNCTION IF EXISTS novo_aceleracao_linear( geometry, geometry, real );
+DROP FUNCTION IF EXISTS obter_aceleracao_perseguidor( int, int, real );
+DROP FUNCTION IF EXISTS registrar_trajeto_perseguicao( INTEGER, INTEGER, REAL );
+
+
+-------------------------------
+-- Obter nova aceleracao linear
+-------------------------------
+
+CREATE OR REPLACE FUNCTION novo_aceleracao_linear( g_posicao_perseguidor geometry,
+												   g_posicao_alvo geometry,
+												   velocidade_a_perseguir real)
+RETURNS t_vector
+AS $$
+DECLARE
+    diff_vector t_vector;
+    norm_diff_vector t_vector;
+BEGIN
+    diff_vector := (ST_X(g_posicao_alvo) - ST_X(g_posicao_perseguidor),
+                    ST_Y(g_posicao_alvo) - ST_Y(g_posicao_perseguidor));
+
+    norm_diff_vector := normalizar_PLPGSQL(diff_vector);
+
+    RETURN produto_vector_por_escalar_PLGSQL(norm_diff_vector, velocidade_a_perseguir);
+END;
+$$ LANGUAGE plpgsql;
+
+---------------------------------------
+-- Obter nova aceleracao do preseguidor
+---------------------------------------
+
+CREATE OR REPLACE FUNCTION obter_aceleracao_perseguidor( id_perseguidor int,
+                                                         id_alvo int,
+                                                         velocidade_a_perseguir real )
+RETURNS t_aceleracao
+AS $$
+SELECT novo_aceleracao_linear( c_perseguidor.g_posicao, c_alvo.g_posicao, $3 ), (c_perseguidor.aceleracao).angular
+FROM objeto_movel c_perseguidor, objeto_movel c_alvo
+WHERE c_perseguidor.id = $1 and c_alvo.id = $2;
+$$ LANGUAGE 'sql';
+
+---------------------------------
+-- Obter o trajeto da preseguicao
+---------------------------------
+
+CREATE OR REPLACE FUNCTION registrar_trajeto_perseguicao(id_perseguidor INTEGER, id_alvo INTEGER, tempo REAL)
+RETURNS VOID
+AS $$
+DECLARE
+	perseguidor objeto_movel%ROWTYPE;
+	alvo objeto_movel%ROWTYPE;
+    orientacao_perseguidor REAL;
+    velocidade_perseguidor t_velocidade;
+    aceleracao_perseguidor t_aceleracao;
+    g_posicao_perseguidor GEOMETRY(Point);
+    orientacao_alvo REAL;
+    velocidade_alvo t_velocidade;
+    aceleracao_alvo t_aceleracao;
+    g_posicao_alvo GEOMETRY(Point);
+	aceleracao_pers t_aceleracao;
+	
+BEGIN
+   
+    -- Obter dados do perseguidor
+    SELECT *
+    INTO perseguidor
+    FROM objeto_movel
+    WHERE id = id_perseguidor;
+	
+	orientacao_perseguidor := perseguidor.orientacao;
+	velocidade_perseguidor := perseguidor.velocidade;
+	aceleracao_perseguidor := perseguidor.aceleracao;
+	g_posicao_perseguidor := perseguidor.g_posicao;
+
+    -- Obter dados do alvo
+    SELECT *
+    INTO alvo
+    FROM objeto_movel
+    WHERE id = id_alvo;
+	
+	orientacao_alvo := alvo.orientacao;
+	velocidade_alvo := alvo.velocidade;
+	aceleracao_alvo := alvo.aceleracao;
+	g_posicao_alvo := alvo.g_posicao;
+	
+	 -- calcular a nova aceleração do perseguidor
+    aceleracao_pers := obter_aceleracao_perseguidor(id_perseguidor, id_alvo, 1);
+
+    -- Atualizar a aceleração do perseguidor
+    UPDATE objeto_movel
+    SET aceleracao = aceleracao_pers
+    WHERE id = id_perseguidor;
+
+    -- Registrar o trajeto da perseguição
+    INSERT INTO hist_perseguicao (
+        id_perseguidor, id_alvo,
+        orientacao_perseguidor, velocidade_perseguidor, aceleracao_perseguidor, g_posicao_perseguidor,
+        orientacao_alvo, velocidade_alvo, aceleracao_alvo, g_posicao_alvo
+    ) VALUES (
+        id_perseguidor, id_alvo,
+        orientacao_perseguidor, velocidade_perseguidor, aceleracao_perseguidor, g_posicao_perseguidor,
+        orientacao_alvo, velocidade_alvo, aceleracao_alvo, g_posicao_alvo
+    );
+END;
+$$ LANGUAGE plpgsql;

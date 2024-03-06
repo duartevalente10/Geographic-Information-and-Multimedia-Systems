@@ -1,0 +1,43 @@
+
+Terrenos, rios e objetos móveis.
+
+
+Tipo de terreno:
+	-Nome(unico)
+	-Efeito de alterar a velocidade(lienar) dos objetos que se deslocam sobre eles.
+		-Assim que um objeto entra num terreno a sua velociadade é afetada num valor precentoal
+		(0% a 100%) e o efeito premanece enquanto o objeto estiver nesse terreno.
+		-Esta variação da velocidade resulta sobre a aceleração.
+	-Os terrenos podem-se intrecetar ( exemplo floresta pode ter um pantano)
+	-Tem de existir uma hierarquia entre os terrenos.
+
+Rios:
+	-Tem o mesmo efeito que os terrenos sobre os objetos.
+	
+Objetos móveis:
+#	-Existem varios tipos de objetos moveis
+#	-Cada um é representado por um ponto geografico -> "g_posicao"
+#	-Tem uma orientação(ângulo medido em graus) -> "orientacao"
+#	-Uma velocidade e aceleração linear (componentes x e y) ->  “velocidade.linear”
+#	-Velocidade e aceleração angular -> “velocidade.angular”
+#	-Um instante de tempo -> "tempo" 
+	-Os objetos moveis devem ter uma velodicade e aceleração maxima
+	
+Cinematica -> movimento que o objeto realiza
+
+
+Formulas:
+
+#	g_posicao := g_posicao + velocidade.linear * tempo
+#	orientacao := orientacao + velocidade.angular * tempo
+#	velocidade.linear := velocidade.linear + aceleracao.linear * tempo
+#	velocidade.angular := velocidade.angular + aceleracao.angular * tempo
+	
+	A aceleração (linear e angular) pode ser constante ou ser calculada para: 
+		- simular uma perseguição
+		- simular uma interação, do tipo “jogo”, com o utilizador
+		
+	
+Para cada obejto deve ser associado uma figura geomentrica para lhe dar corpo.
+Todos os movimentos dos objetos devem ser mantidos em histórico para visualizar
+no QGis as tranjetorias ao longo do tempo

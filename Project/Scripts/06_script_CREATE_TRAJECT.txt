@@ -1,0 +1,106 @@
+--=============
+-- Ligação à BD
+--=============
+\set dataBase db_tpa
+;
+\set userName postgres
+;
+\connect :dataBase :userName
+;
+
+-------------------------------
+--- Resconstruir os dados
+-------------------------------
+DELETE FROM pp;
+DELETE FROM hist_objeto_movel;
+DELETE FROM objecto_geometrico_movel;
+DELETE FROM objeto_movel;
+DELETE FROM hist_perseguicao;
+
+
+INSERT INTO objeto_movel( id, nome, g_posicao, orientacao, velocidade, aceleracao ) VALUES(
+1,
+'mota',
+ST_GeomFromText( 'POINT( 2 2 )', 3763 ),
+0.0,
+ROW( ROW( 0.5, 1.5 ), 1.5 ),
+ROW( ROW( 0.3, -0.1 ), 1.0 )
+);
+
+INSERT INTO objeto_movel( id, nome, g_posicao, orientacao, velocidade, aceleracao ) VALUES(
+2,
+'carro',
+ST_GeomFromText( 'POINT( 2 20 )', 3763 ),
+0.0,
+ROW( ROW( 1, 2 ), 1.5 ),
+ROW( ROW( 0.3, -0.1 ), 1.0 )
+);
+
+INSERT INTO objecto_geometrico_movel( id, nome, id_objeto_movel, geo ) VALUES (
+1,
+'mota',
+1,
+ST_GeomFromText( 'POLYGON( ( 0 0, 1 0, 1 1, 0 1, 0 0 ) )', 3763 )
+);
+
+INSERT INTO objecto_geometrico_movel( id, nome, id_objeto_movel, geo ) VALUES (
+2,
+'carro',
+2,
+ST_GeomFromText( 'POLYGON( ( 0 0, 2 0, 2 1, 0 1, 0 0 ) )', 3763 )
+);
+
+-----------------------------------------
+--- Atualizar o terreno do objeto movel
+-----------------------------------------
+
+SELECT atualizar_terreno_objeto_movel();
+
+---------------------------------------------
+--- Efetuar a preseguicao
+---------------------------------------------
+
+SELECT registrar_trajeto(1.0);
+SELECT registrar_trajeto_perseguicao(1, 2, 1);
+SELECT registrar_trajeto(1.0);
+SELECT registrar_trajeto_perseguicao(1, 2, 1);
+SELECT registrar_trajeto(1.0);
+SELECT registrar_trajeto_perseguicao(1, 2, 1);
+SELECT registrar_trajeto(1.0);
+SELECT registrar_trajeto_perseguicao(1, 2, 1);
+SELECT registrar_trajeto(1.0);
+SELECT registrar_trajeto_perseguicao(1, 2, 1);
+SELECT registrar_trajeto(1.0);
+SELECT registrar_trajeto_perseguicao(1, 2, 1);
+SELECT registrar_trajeto(1.0);
+SELECT registrar_trajeto_perseguicao(1, 2, 1);
+SELECT registrar_trajeto(1.0);
+SELECT registrar_trajeto_perseguicao(1, 2, 1);
+SELECT registrar_trajeto(1.0);
+SELECT registrar_trajeto_perseguicao(1, 2, 1);
+SELECT registrar_trajeto(1.0);
+SELECT registrar_trajeto_perseguicao(1, 2, 1);
+SELECT registrar_trajeto(1.0);
+SELECT registrar_trajeto_perseguicao(1, 2, 1);
+SELECT registrar_trajeto(1.0);
+SELECT registrar_trajeto_perseguicao(1, 2, 1);
+SELECT registrar_trajeto(1.0);
+SELECT registrar_trajeto_perseguicao(1, 2, 1);
+
+---------------------------------------------
+--- Registar os trajetos dos objetos moveis
+---------------------------------------------
+
+SELECT registrar_trajeto(1.0);
+SELECT registrar_trajeto(1.0);
+SELECT registrar_trajeto(1.0);
+SELECT registrar_trajeto(1.0);
+SELECT registrar_trajeto(1.0);
+SELECT registrar_trajeto(1.0);
+SELECT registrar_trajeto(1.0);
+SELECT registrar_trajeto(1.0);
+SELECT registrar_trajeto(1.0);
+SELECT registrar_trajeto(1.0);
+SELECT registrar_trajeto(1.0);
+SELECT registrar_trajeto(1.0);
+SELECT registrar_trajeto(1.0);

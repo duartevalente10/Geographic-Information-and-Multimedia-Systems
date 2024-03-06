@@ -1,0 +1,56 @@
+--=============
+-- Ligação à BD
+--=============
+\set dataBase db_tpa
+;
+\set userName postgres
+;
+\connect :dataBase :userName
+;
+
+
+-------------------------------------------------
+-- Vista que reprenta o ponto 0,0 do referencial
+-------------------------------------------------
+
+DROP VIEW IF EXISTS v_ponto_origem;
+DROP TABLE IF EXISTS t_id;
+
+CREATE TABLE t_id( id int PRIMARY KEY );
+INSERT INTO t_id( id ) VALUES ( 0 );
+
+CREATE VIEW v_ponto_origem AS
+SELECT id, ST_GeomFromText( 'POINT( 0 0 )', 3763 ) AS ponto_origem
+FROM t_id;
+
+-------------------------------------------------------------------------------
+-- Vista com um qualquer objecto geometrico que se desloca com o objecto movel
+-------------------------------------------------------------------------------
+
+DROP VIEW IF EXISTS v_posicionar;
+
+CREATE VIEW v_posicionar AS
+SELECT
+  om.id,
+  ST_Translate(om.geo, ST_X(c.g_posicao) - ST_X(ST_Centroid(om.geo)), ST_Y(c.g_posicao) - ST_Y(ST_Centroid(om.geo))) AS posicao_centroide
+FROM objecto_geometrico_movel om
+JOIN objeto_movel c ON om.id_objeto_movel = c.id;
+
+
+-----------------------------------
+-- View para mostrar a history dos objetos moveis
+-----------------------------------
+
+CREATE OR REPLACE VIEW v_trajeto_objeto_movel AS
+SELECT
+    h.id_hist,
+    h.id,
+    h.orientacao,
+    h.velocidade,
+    h.aceleracao,
+    h.g_posicao AS posicao,
+    ST_Translate(om.geo, ST_X(h.g_posicao) - ST_X(ST_Centroid(om.geo)), ST_Y(h.g_posicao) - ST_Y(ST_Centroid(om.geo))) AS posicao_centroide
+FROM hist_objeto_movel h
+JOIN objecto_geometrico_movel om ON h.id = om.id_objeto_movel;
+
+

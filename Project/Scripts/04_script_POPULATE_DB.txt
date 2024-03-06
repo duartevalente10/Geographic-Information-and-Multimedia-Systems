@@ -1,0 +1,131 @@
+--=============
+-- Ligação à BD
+--=============
+\set dataBase db_tpa
+;
+\set userName postgres
+;
+\connect :dataBase :userName
+;
+
+--------------------------------
+-- Adicionar dados Objeto Movel
+--------------------------------
+
+DELETE FROM objeto_movel;
+
+INSERT INTO objeto_movel( id, nome, g_posicao, orientacao, velocidade, aceleracao ) VALUES(
+1,
+'mota',
+ST_GeomFromText( 'POINT( 2 2 )', 3763 ),
+0.0,
+ROW( ROW( 0.5, 1.5 ), 1.5 ),
+ROW( ROW( 0.3, -0.1 ), 1.0 )
+);
+
+INSERT INTO objeto_movel( id, nome, g_posicao, orientacao, velocidade, aceleracao ) VALUES(
+2,
+'carro',
+ST_GeomFromText( 'POINT( 2 20 )', 3763 ),
+0.0,
+ROW( ROW( 1, 2 ), 1.5 ),
+ROW( ROW( 0.3, -0.1 ), 1.0 )
+);
+
+
+-----------------------------------------------
+-- Adicionar dados do Objeto Movel à historia
+------------------------------------------------
+
+DELETE FROM hist_objeto_movel;
+
+INSERT INTO hist_objeto_movel
+SELECT nextval('hist_objeto_movel_id_hist_seq'), id, orientacao, velocidade , aceleracao, g_posicao
+FROM objeto_movel;
+
+----------------------------------------------
+-- Adicionar objeto geometico ao Objeto Movel
+----------------------------------------------
+
+DELETE FROM objecto_geometrico_movel;
+
+INSERT INTO objecto_geometrico_movel( id, nome, id_objeto_movel, geo ) VALUES (
+1,
+'mota',
+1,
+ST_GeomFromText( 'POLYGON( ( 0 0, 1 0, 1 1, 0 1, 0 0 ) )', 3763 )
+);
+
+INSERT INTO objecto_geometrico_movel( id, nome, id_objeto_movel, geo ) VALUES (
+2,
+'carro',
+2,
+ST_GeomFromText( 'POLYGON( ( 0 0, 2 0, 2 1, 0 1, 0 0 ) )', 3763 )
+);
+
+-------------------------
+-- Criar novos Terrenos
+-------------------------
+
+DELETE FROM terreno;
+
+INSERT INTO terreno (id, nome, efeitoAltVel, valHier, g_terreno) VALUES (
+1,
+'Floresta',
+50,
+1,
+'POLYGON(( 40.00 0, 40.00 50.00, 60.00 50.00, 60.00 0, 40.00 0))'
+);
+
+INSERT INTO terreno (id, nome, efeitoAltVel, valHier, g_terreno) VALUES (
+2,
+'Floresta',
+50,
+1,
+'POLYGON((20.00 30.00, 20.00 50.00, 40.00 50.00, 40.00 30.00, 20.00 30.00))'
+);
+
+INSERT INTO terreno (id, nome, efeitoAltVel, valHier, g_terreno) VALUES (
+3,
+'Plantacao',
+20,
+1,
+'POLYGON(( 20.00 0, 20.00 30.00, 40.00 30.00, 40.00 0, 20.00 0))'
+);
+
+INSERT INTO terreno (id, nome, efeitoAltVel, valHier, g_terreno) VALUES (
+4,
+'Plantacao',
+20,
+1,
+'POLYGON((0 0, 0 50.00, 20.00 50.00, 20.00 0, 0 0))'
+);
+
+-------------------------
+-- Criar novos Rios
+-------------------------
+
+DELETE FROM rio;
+
+INSERT INTO rio (id, efeitoAltVel, g_linha) VALUES (
+1,
+80,
+'POLYGON((20.00 0, 45.00 40.00, 60.00 40.00, 60.00 38.00, 45.00 38.00, 22.00 0, 20.00 0))'
+);
+
+INSERT INTO rio (id, efeitoAltVel, g_linha) VALUES (
+2,
+80,
+'POLYGON((0 25.00, 25.00 30.00, 50.00 50.00, 48.00 50.00, 24.00 31.00, 0 26.00,0 25.00))'
+);
+
+----------------------------------------------
+-- Valores maximos de aceleracao e velocidade
+----------------------------------------------
+
+DELETE FROM valores_max;
+
+INSERT INTO valores_max (velocidade_max, aceleracao_max) VALUES (
+    (ROW(ROW(5.5, 5.5), 7.5),
+    (ROW(ROW(1.0, 1.0), 2.0) 
+);

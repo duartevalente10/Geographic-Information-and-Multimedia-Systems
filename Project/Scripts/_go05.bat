@@ -1,0 +1,1 @@
+_go 05_script_CREATE_VIEWS.txt

@@ -1,0 +1,246 @@
+--=============
+-- Ligacao a BD
+--=============
+\set dataBase db_tpa
+;
+\set userName postgres
+;
+\connect :dataBase :userName
+;
+
+
+-------------------------------------------
+-- Obter valores para um instante do tempo
+--------------------------------------------
+
+DROP FUNCTION IF EXISTS novo_posicao( geometry, t_velocidade, real );
+DROP FUNCTION IF EXISTS novo_orientacao( real, t_velocidade, real );
+DROP FUNCTION IF EXISTS novo_velocidade( t_velocidade, t_aceleracao, real );
+
+----------------------------------
+-- Obter nova posicao num instante
+----------------------------------
+
+CREATE OR REPLACE FUNCTION novo_posicao( g_posicao geometry, velocidade t_velocidade, tempo real )
+RETURNS geometry
+AS $$
+SELECT 
+ST_Translate( $1,
+              (($2).linear * $3 ).x,
+              (($2).linear * $3 ).y )
+$$ LANGUAGE 'sql';
+
+----------------------------------
+-- Obter nova orientacao num instante
+----------------------------------
+
+CREATE OR REPLACE FUNCTION novo_orientacao( orientacao real, velocidade t_velocidade, tempo real )
+RETURNS real
+AS $$
+DECLARE
+    nova_orientacao real;
+BEGIN
+    nova_orientacao := orientacao + (velocidade.angular * tempo);
+    RETURN nova_orientacao;
+END;
+$$ LANGUAGE plpgsql;
+
+-------------------------------------
+-- Obter nova velocidade num instante
+-------------------------------------
+
+CREATE OR REPLACE FUNCTION novo_velocidade( velocidade t_velocidade, aceleracao t_aceleracao, tempo real)
+RETURNS t_velocidade
+AS $$
+DECLARE
+    nova_velocidade t_velocidade;
+	vel_max valores_max%ROWTYPE;
+	linear_nova_velocidade t_vector;
+BEGIN
+
+	-- obter valores  da tabela valores_max
+    SELECT * INTO vel_max FROM valores_max;
+	
+    nova_velocidade := (
+        (velocidade.linear + (aceleracao.linear * tempo)),
+        (velocidade.angular + (aceleracao.angular * tempo))
+    );
+	
+	-- obter o ponto da velocidade linear
+	linear_nova_velocidade := nova_velocidade.linear;
+	
+	-- verificar se a nova excede a velocidade maxima
+    IF linear_nova_velocidade.x > (vel_max.velocidade_max).linear.x THEN
+        -- reduzir a velocidade linear para o máximo permitido
+        linear_nova_velocidade.x := (vel_max.velocidade_max).linear.x;
+    END IF;
+
+    IF linear_nova_velocidade.y > (vel_max.velocidade_max).linear.y THEN
+        -- reduzir a velocidade linear para o máximo permitido
+        linear_nova_velocidade.y := (vel_max.velocidade_max).linear.y;
+    END IF;
+	
+	-- indicar a nova velocidade linear
+	nova_velocidade.linear := linear_nova_velocidade;
+
+    IF nova_velocidade.angular > (vel_max.velocidade_max).angular THEN
+        -- reduzir a velocidade angular para o máximo permitido
+        nova_velocidade.angular := (vel_max.velocidade_max).angular;
+    END IF;
+
+    RETURN nova_velocidade;
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------
+-- Função para atualizar o terreno onde se encontra o objeto movel
+--------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION atualizar_terreno_objeto_movel()
+RETURNS VOID
+AS $$
+DECLARE
+    objeto_movel_row objeto_movel%ROWTYPE;
+    terreno_id INTEGER;
+BEGIN
+    FOR objeto_movel_row IN SELECT * FROM objeto_movel
+    LOOP
+        SELECT id INTO terreno_id
+        FROM terreno
+        WHERE ST_Within(objeto_movel_row.g_posicao, g_terreno);
+        UPDATE objeto_movel SET id_terreno = terreno_id WHERE id = objeto_movel_row.id;
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql;
+
+--------------------------------------------------------------------
+-- Função para verificar o terreno onde se encontra uma geometria
+--------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION obter_terreno_na_posicao(g_posicao geometry)
+RETURNS INTEGER
+AS $$
+DECLARE
+    objeto_movel_row objeto_movel%ROWTYPE;
+    terreno_id INTEGER;
+	verificarRio rio%ROWTYPE;
+	id_rio_encontrado INTEGER;
+	
+BEGIN
+	-- encontrar o id
+    SELECT id INTO terreno_id
+    FROM terreno
+    WHERE ST_Within(g_posicao, g_terreno);
+	
+	FOR objeto_movel_row IN SELECT * FROM objeto_movel
+    LOOP
+		FOR verificarRio IN SELECT * FROM rio
+		LOOP
+		
+			IF ST_Within(g_posicao, verificarRio.g_linha) = TRUE THEN
+				UPDATE objeto_movel SET esta_no_rio = TRUE, id_rio = verificarRio.id  WHERE id = objeto_movel_row.id;
+			ELSE
+				UPDATE objeto_movel SET esta_no_rio = FALSE WHERE id = objeto_movel_row.id;
+			END IF;	
+		END LOOP;
+	END LOOP;
+    -- id do terreno
+    RETURN terreno_id;
+END;
+$$ LANGUAGE plpgsql;
+
+------------------------------------------------------------------
+-- Função para registar um trajeto atualizar terreno e aceleracao e nova velocidade
+--------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION registrar_trajeto(tempo real)
+RETURNS VOID
+AS $$
+DECLARE
+    objeto_movel_row objeto_movel%ROWTYPE;
+    terreno_row terreno%ROWTYPE;
+	rio_row rio%ROWTYPE;
+	id_terreno_instante objeto_movel%ROWTYPE;
+	acl_max valores_max%ROWTYPE;
+BEGIN
+
+    FOR objeto_movel_row IN SELECT * FROM objeto_movel
+    LOOP
+        -- obter os dados do terreno em que o objeto movel está
+        SELECT * INTO terreno_row FROM terreno WHERE id = objeto_movel_row.id_terreno;
+
+        -- verificar a aceleração momentânea do objeto movel
+        IF objeto_movel_row.aceleracao_momentanea_aplicada = FALSE THEN
+            -- altera a aceleracao
+            objeto_movel_row.aceleracao.linear := (
+                (objeto_movel_row.aceleracao).linear.x + (objeto_movel_row.aceleracao).linear.x * (terreno_row.efeitoAltVel / 100.0),
+                (objeto_movel_row.aceleracao).linear.y + (objeto_movel_row.aceleracao).linear.y * (terreno_row.efeitoAltVel / 100.0)
+            );
+			
+			-- alterar a aceleracao algular
+			objeto_movel_row.aceleracao.angular := (
+				(objeto_movel_row.aceleracao).angular + (objeto_movel_row.aceleracao).angular * (terreno_row.efeitoAltVel / 100.0)
+			);			
+
+            -- guardar a alteracao da aceleracao momentanea
+            objeto_movel_row.aceleracao_momentanea_aplicada := TRUE;
+
+            -- atuazliar a aceleração na tabela objeto_movel
+            UPDATE objeto_movel SET aceleracao = objeto_movel_row.aceleracao, aceleracao_momentanea_aplicada = TRUE WHERE id = objeto_movel_row.id;
+        END IF;
+		
+		-- obter os dados do rio em que o objeto movel está
+        SELECT * INTO rio_row FROM rio WHERE id = objeto_movel_row.id_rio;
+		
+		IF objeto_movel_row.esta_no_rio = TRUE THEN
+			-- altera a aceleracao
+            objeto_movel_row.aceleracao.linear := (
+                (objeto_movel_row.aceleracao).linear.x + (objeto_movel_row.aceleracao).linear.x * (rio_row.efeitoAltVel / 100.0),
+                (objeto_movel_row.aceleracao).linear.y + (objeto_movel_row.aceleracao).linear.y * (rio_row.efeitoAltVel / 100.0)
+            );
+			
+			-- alterar a aceleracao algular
+			objeto_movel_row.aceleracao.angular := (
+				(objeto_movel_row.aceleracao).angular + (objeto_movel_row.aceleracao).angular * (terreno_row.efeitoAltVel / 100.0)
+			);
+
+            -- atuazliar a aceleração na tabela objeto_movel
+            UPDATE objeto_movel SET aceleracao = objeto_movel_row.aceleracao WHERE id = objeto_movel_row.id;
+        END IF;
+		
+		-- obter valores  da tabela valores_max
+		SELECT * INTO acl_max FROM valores_max;
+		
+		-- verificar se a nova aceleracao excede a aceleracao maxima
+		IF (objeto_movel_row.aceleracao).angular > (acl_max.aceleracao_max).angular THEN
+			-- reduzir a velocidade para o máximo permitido
+			objeto_movel_row.aceleracao.angular := (acl_max.aceleracao_max).angular;
+		END IF;
+			
+		IF (objeto_movel_row.aceleracao).linear > (acl_max.aceleracao_max).linear THEN
+			-- reduzir a velocidade para o máximo permitido
+			objeto_movel_row.aceleracao.linear := (acl_max.aceleracao_max).linear;
+		END IF;
+		
+        -- calcular a velocidade num instante
+        objeto_movel_row.velocidade := novo_velocidade(objeto_movel_row.velocidade, objeto_movel_row.aceleracao, tempo);
+
+        -- obter a possicao do objeto movel num instante
+        objeto_movel_row.g_posicao := novo_posicao(objeto_movel_row.g_posicao, objeto_movel_row.velocidade, tempo);
+		
+		-- obter id do terreno na possicao 
+		id_terreno_instante.id_terreno := obter_terreno_na_posicao(objeto_movel_row.g_posicao);
+		
+		-- atualizar a g_posicao e a velocidade
+		UPDATE objeto_movel SET velocidade = objeto_movel_row.velocidade, g_posicao = objeto_movel_row.g_posicao WHERE id = objeto_movel_row.id;
+		
+		-- colocar a velocidade momentanea a false se mudar de terreno
+		IF id_terreno_instante.id_terreno != objeto_movel_row.id_terreno THEN
+			UPDATE objeto_movel SET id_terreno = id_terreno_instante.id_terreno, aceleracao_momentanea_aplicada = FALSE WHERE id = objeto_movel_row.id;
+		END IF;
+		
+        INSERT INTO hist_objeto_movel(id, orientacao, velocidade, aceleracao, id_terreno, id_rio,g_posicao)
+        VALUES (objeto_movel_row.id, objeto_movel_row.orientacao, objeto_movel_row.velocidade, objeto_movel_row.aceleracao, objeto_movel_row.id_terreno, objeto_movel_row.id_rio ,objeto_movel_row.g_posicao);
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql;

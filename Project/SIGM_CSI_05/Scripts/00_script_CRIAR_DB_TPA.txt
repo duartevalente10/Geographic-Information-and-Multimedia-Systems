@@ -1,0 +1,27 @@
+-------------------
+-- Dados da Conexao
+-------------------
+\set userName postgres
+\set hostName localhost
+\set portNumber 5432
+
+-------------
+-- Nome da BD
+-------------
+\set dataBase db_tpa;
+
+-- remover a db
+DROP DATABASE IF EXISTS :dataBase;
+
+-- criar a DB
+CREATE DATABASE :dataBase;
+
+-- conectar
+\c db_tpa postgres localhost 5432;
+
+-- adicionar a extencao do postgis
+
+\echo
+\echo "Aplicar o Extensor "postgis" à Base de Dados" :dataBase
+;
+CREATE EXTENSION IF NOT EXISTS postgis;

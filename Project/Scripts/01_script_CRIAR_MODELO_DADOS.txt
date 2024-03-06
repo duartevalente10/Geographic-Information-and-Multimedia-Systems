@@ -1,0 +1,206 @@
+--=============
+-- Ligacao a BD
+--=============
+\set dataBase db_tpa
+;
+\set userName postgres
+;
+\connect :dataBase :userName
+;
+
+----------------------------------------------------
+-- Estender o Modelo Relacional com Novas Estruturas
+----------------------------------------------------
+DROP TYPE IF EXISTS t_velocidade;
+DROP TYPE IF EXISTS t_aceleracao;
+DROP OPERATOR IF EXISTS *( t_vector, real );
+DROP OPERATOR IF EXISTS *( real, t_vector );
+DROP OPERATOR IF EXISTS +( t_vector, t_vector );
+
+----------------------------------------------------
+-- Criar as componetes de velocidade e aceleração
+----------------------------------------------------
+
+--componetes da velocidade e aceleracao linear
+CREATE TYPE t_vector AS (
+ x real,
+ y real
+);
+
+--tipo de velocidade que um objeto pode ter
+CREATE TYPE t_velocidade AS (
+  linear t_vector,
+  angular real
+);
+
+--tipo de aceleracao que um objeto pode ter
+CREATE TYPE t_aceleracao AS (
+  linear t_vector,
+  angular real
+);
+
+----------------------------------------------------
+-- Funcoes para calcular velocidades e aceleracoes
+----------------------------------------------------
+
+-- multiplicacao
+CREATE OR REPLACE FUNCTION produto_vector_por_escalar_PLGSQL( vec t_vector, v real )
+RETURNS t_vector
+AS $$
+DECLARE
+    new_x real;
+    new_y real;
+BEGIN
+    new_x := vec.x * v;
+    new_y := vec.y * v;
+    RETURN (new_x, new_y);
+END;
+$$ LANGUAGE plpgsql;
+
+-- soma
+CREATE OR REPLACE FUNCTION soma_vector_vector( vec_a t_vector, vec_b t_vector )
+RETURNS t_vector
+AS $$
+DECLARE
+    result t_vector;
+BEGIN
+    result.x := vec_a.x + vec_b.x;
+    result.y := vec_a.y + vec_b.y;
+    RETURN result;
+END;
+$$ LANGUAGE plpgsql;
+
+--normalizar
+CREATE OR REPLACE FUNCTION normalizar_PLPGSQL( vec t_vector )
+RETURNS t_vector
+AS $$
+DECLARE
+    norma real;
+    new_x real;
+    new_y real;
+BEGIN
+    norma := sqrt(vec.x^2 + vec.y^2);
+
+    IF norma <> 0 THEN
+        new_x := vec.x / norma;
+        new_y := vec.y / norma;
+    ELSE
+        new_x := 0;
+        new_y := 0;
+    END IF;
+	
+    RETURN (new_x, new_y);
+END;
+$$ LANGUAGE plpgsql;
+
+
+------------------------------
+-- Operadores para as funcoes
+------------------------------
+-- multiplicacao
+CREATE OPERATOR * (
+leftarg = t_vector,
+rightarg = real,
+procedure = produto_vector_por_escalar_PLGSQL,
+commutator = *
+);
+
+--soma
+CREATE OPERATOR + (
+    LEFTARG = t_vector,
+    RIGHTARG = t_vector,
+    PROCEDURE = soma_vector_vector
+);
+
+
+------------------------------
+-- Criar Objeto Movel
+------------------------------
+
+CREATE TABLE objeto_movel (
+    id SERIAL PRIMARY KEY,
+	nome VARCHAR(20),
+    orientacao REAL,
+    velocidade t_velocidade,
+    aceleracao t_aceleracao,
+    timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE objeto_movel ADD CONSTRAINT unique_id_timestamp UNIQUE (id, timestamp);
+ALTER TABLE objeto_movel ADD COLUMN id_terreno INTEGER REFERENCES terreno(id);
+ALTER TABLE objeto_movel ADD COLUMN id_rio INTEGER REFERENCES rio(id);
+ALTER TABLE objeto_movel ADD COLUMN aceleracao_momentanea_aplicada BOOLEAN DEFAULT FALSE;
+ALTER TABLE objeto_movel ADD COLUMN esta_no_rio BOOLEAN DEFAULT FALSE;
+
+SELECT AddGeometryColumn( '', 'objeto_movel', 'g_posicao', 3763, 'POINT', 2 );
+
+
+--------------------------------------------------
+-- Tabela de registo do movimento do objeto movel
+--------------------------------------------------
+
+-- regista trajectos
+
+CREATE TABLE hist_objeto_movel(
+    id_hist SERIAL PRIMARY KEY,
+    id INT,
+    orientacao REAL,
+    velocidade t_velocidade,
+    aceleracao t_aceleracao,
+    FOREIGN KEY (id) REFERENCES objeto_movel (id) ON DELETE CASCADE
+);
+SELECT AddGeometryColumn( '', 'hist_objeto_movel', 'g_posicao', 3763, 'POINT', 2 );
+
+ALTER TABLE hist_objeto_movel ADD COLUMN id_terreno INTEGER;
+ALTER TABLE hist_objeto_movel ADD COLUMN id_rio INTEGER;
+
+---------------------------------------------------------------------
+-- Tabela com o objecto geometrico que se desloca com o objeto movel
+---------------------------------------------------------------------
+
+DROP TABLE IF EXISTS objecto_geometrico_movel;
+
+CREATE TABLE objecto_geometrico_movel (
+  id serial PRIMARY KEY,
+  nome VARCHAR(255),
+  id_objeto_movel INTEGER REFERENCES objeto_movel(id)
+);
+SELECT AddGeometryColumn('', 'objecto_geometrico_movel', 'geo', 3763, 'POLYGON', 2);
+
+-------------------------
+-- Criar Tabela Terrenos
+-------------------------
+
+CREATE TABLE terreno (
+    id SERIAL PRIMARY KEY,
+	nome VARCHAR(20),
+	efeitoAltVel INTEGER,
+	valHier INTEGER,
+    g_terreno GEOMETRY(Polygon)
+);
+
+UPDATE terreno SET g_terreno = ST_SetSRID(g_terreno, 3763);
+
+---------------------
+-- Criar Tabela Rios
+---------------------
+
+CREATE TABLE rio (
+    id SERIAL PRIMARY KEY,
+	efeitoAltVel INTEGER,
+    g_linha GEOMETRY(Polygon)
+);
+
+UPDATE rio SET g_linha = ST_SetSRID(g_linha, 3763);
+
+---------------------------------------------------------------
+-- Criar Tabela dos Valores Maximos de aceleracao e velocidade
+----------------------------------------------------------------
+
+CREATE TABLE valores_max (
+    id SERIAL PRIMARY KEY,
+    velocidade_max t_velocidade,
+    aceleracao_max t_aceleracao
+);
+
+
